@@ -3,7 +3,6 @@
 #define HOME_BUTTON 8
 #define FLIP_DIR_BUTTON 9
 #define PAUSE_RUN_SWITCH 10
-#define MAN_AUTO_SWITCH 11
 #define VELOCITY_POT A0
 #define DISTANCE_POT A1
 
@@ -43,7 +42,6 @@ void setup()
   pinMode(HOME_BUTTON, INPUT_PULLUP);
   pinMode(FLIP_DIR_BUTTON, INPUT_PULLUP);
   pinMode(PAUSE_RUN_SWITCH, INPUT_PULLUP);
-  pinMode(MAN_AUTO_SWITCH, INPUT_PULLUP);
   pinMode(VELOCITY_POT, INPUT);
   pinMode(DISTANCE_POT, INPUT);
 
@@ -103,50 +101,37 @@ void loop()
   updateHomeState();
 
 
-  if (digitalRead(MAN_AUTO_SWITCH) == LOW) {
-    if (analog_read_counter > 0) {
-      analog_read_counter--;
-    } else {
-      analog_read_counter = 3000;
-      // now read the pot (from 0 to 1023)
-      velocity_val = analogRead(VELOCITY_POT);
-      distance_val = map(analogRead(DISTANCE_POT), 0, 1023, 0, MAX_DISTANCE);
-      if (distance_val != pos) {
-        pos = distance_val;
-        stepper.stop();
-        stepper.moveTo(sign * pos);
-      }
-      current_speed = ((velocity_val / 1023.0) * (MAX_SPEED - MIN_SPEED)) + MIN_SPEED;
-      stepper.setSpeed(current_speed);
-    }
-    //    Serial.println("auto mode");
-    if (stepper.distanceToGo() == 0) {
-      //      Serial.print("new pos = ");
-      //      Serial.println(pos);
-      sign = -1 * sign;
+  if (analog_read_counter > 0) {
+    analog_read_counter--;
+  } else {
+    analog_read_counter = 3000;
+    // now read the pot (from 0 to 1023)
+    velocity_val = analogRead(VELOCITY_POT);
+    distance_val = map(analogRead(DISTANCE_POT), 0, 1023, 0, MAX_DISTANCE);
+    if (distance_val != pos) {
+      pos = distance_val;
+      stepper.stop();
       stepper.moveTo(sign * pos);
-      stepper.setSpeed(current_speed);
-      //      Serial.print("current speed = ");
-      //      Serial.println(current_speed);
     }
-        Serial.print("stepper position = ");
-        Serial.print(stepper.currentPosition());
-        Serial.print(" ");
-        Serial.println(stepper.targetPosition());
-    stepper.runSpeedToPosition();
-  } else if (digitalRead(MAN_AUTO_SWITCH) == HIGH) {
-
-    // MANUAL MODE HERE
-    // flip direction still works
-
-    int localD = analogRead(DISTANCE_POT);
-    localD = map(localD, 0, 1023, 0, MAX_DISTANCE);
-    int localV = analogRead(VELOCITY_POT);
-    localV = ((localV / 1023.0) * (MAX_SPEED - MIN_SPEED)) + MIN_SPEED;
-    stepper.moveTo(sign * localD);
-    stepper.setSpeed(localV);
-    stepper.runSpeedToPosition();
+    current_speed = ((velocity_val / 1023.0) * (MAX_SPEED - MIN_SPEED)) + MIN_SPEED;
+    stepper.setSpeed(current_speed);
   }
+  //    Serial.println("auto mode");
+  if (stepper.distanceToGo() == 0) {
+    //      Serial.print("new pos = ");
+    //      Serial.println(pos);
+    sign = -1 * sign;
+    stepper.moveTo(sign * pos);
+    stepper.setSpeed(current_speed);
+    //      Serial.print("current speed = ");
+    //      Serial.println(current_speed);
+  }
+  Serial.print("stepper position = ");
+  Serial.print(stepper.currentPosition());
+  Serial.print(" ");
+  Serial.println(stepper.targetPosition());
+  stepper.runSpeedToPosition();
+
 
 }
 
