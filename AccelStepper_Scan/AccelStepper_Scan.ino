@@ -7,6 +7,8 @@
 #define DISTANCE_POT A1
 #define LIMIT_REAR A2
 #define LIMIT_FRONT A3
+#define LIMIT_REAR_THRESHOLD 925 // Adjust this based on new install
+#define LIMIT_FRONT_THRESHOLD 925 // Adjust this based on new install 
 #define NUM_LIMIT_READINGS 10
 
 #define MOTOR_DIR 2
@@ -36,12 +38,18 @@ int homeState;
 int lastHomeState = LOW;
 
 // Limit Sensors
+
+// Rear sensor
 int limitRearReadings[NUM_LIMIT_READINGS];      // the readings from the analog input
 int limitRearReadIndex = 0;              // the index of the current reading
 int limitRearTotal = 0;                  // the running total
 int limitRearAverage = 0; // the average
-boolean overshoot = false;
 
+// Front sensor
+int limitFrontReadings[NUM_LIMIT_READINGS];      // the readings from the analog input
+int limitFrontReadIndex = 0;              // the index of the current reading
+int limitFrontTotal = 0;                  // the running total
+int limitFrontAverage = 0; // the average
 
 void setup()
 {
@@ -60,7 +68,7 @@ void setup()
     limitRearReadings[thisReading] = 0;
   }
 
-  Serial.begin(115200);
+  //Serial.begin(115200);
 }
 
 // Simple debounce to toggle the flip direction pushbutton
@@ -75,7 +83,7 @@ void updateDirection() {
       flipDirState = reading;
       if (flipDirState == LOW) {
         inReverse = !inReverse;
-        Serial.println("flipping!");
+        Serial.println("Flipping direction");
         if (inReverse) {
           sign = -1;
         } else if (!inReverse) {
@@ -97,7 +105,7 @@ void updateHomeState() {
     if (reading != homeState) {
       homeState = reading;
       if (homeState == LOW) {
-        Serial.println("Setting new home direction");
+        Serial.println("New home established");
         stepper.setCurrentPosition(0);
         delay(1000);
         stepper.moveTo(pos);
@@ -107,7 +115,7 @@ void updateHomeState() {
   lastHomeState = reading;
 }
 
-void checkLimits() {
+void checkRearLimit() {
   static int analog_read_counter = 0;
   // subtract the last reading:
   limitRearTotal = limitRearTotal - limitRearReadings[limitRearReadIndex];
@@ -126,20 +134,57 @@ void checkLimits() {
 
   // calculate the average:
   limitRearAverage = limitRearTotal / NUM_LIMIT_READINGS;
-  Serial.print("Limit Reading = ");
-  Serial.print(limitRearAverage);
-  Serial.print(" | analog poll = ");
-  Serial.println(analog_read_counter);
+  
+//  Serial.print("Rear Limit Reading = ");
+//  Serial.print(limitRearAverage);
+//  Serial.print(" | analog poll = ");
+//  Serial.println(analog_read_counter);
 
   // Analog Read Counter provides debounce
-  if (limitRearAverage < 920 && analog_read_counter <= 0) {
-    Serial.println("Time to turn around!");
-    sign = -sign;
-    analog_read_counter = 20;
+  if (limitRearAverage < LIMIT_REAR_THRESHOLD && analog_read_counter <= 0) {
+    // Serial.println("Rear limit hit!");
+    sign = -sign; // flip direction
+    analog_read_counter = 20; // trial and error value
   }
 
   analog_read_counter--;
 }
+
+void checkFrontLimit() {
+  static int analog_read_counter = 0;
+  // subtract the last reading:
+  limitFrontTotal = limitFrontTotal - limitFrontReadings[limitFrontReadIndex];
+  // read from the sensor:
+  limitFrontReadings[limitFrontReadIndex] = analogRead(LIMIT_FRONT);
+  // add the reading to the total:
+  limitFrontTotal = limitFrontTotal + limitFrontReadings[limitFrontReadIndex];
+  // advance to the next position in the array:
+  limitFrontReadIndex = limitFrontReadIndex + 1;
+
+  // if we're at the end of the array...
+  if (limitFrontReadIndex >= NUM_LIMIT_READINGS) {
+    // ...wrap around to the beginning:
+    limitFrontReadIndex = 0;
+  }
+
+  // calculate the average:
+  limitFrontAverage = limitFrontTotal / NUM_LIMIT_READINGS;
+  
+//  Serial.print("Front Limit Reading = ");
+//  Serial.print(limitFrontAverage);
+//  Serial.print(" | analog poll = ");
+//  Serial.println(analog_read_counter);
+
+  // Analog Read Counter provides debounce
+  if (limitFrontAverage < LIMIT_FRONT_THRESHOLD && analog_read_counter <= 0) {
+    // Serial.println("Front limit hit!");
+    sign = -sign; // flip direction
+    analog_read_counter = 20; // trial and error value
+  }
+
+  analog_read_counter--;
+}
+
 
 void loop()
 {
@@ -176,13 +221,16 @@ void loop()
     distance_val = sign * map(distance_val, 0, 1023, 0, MAX_DISTANCE);
     current_speed = sign * ((velocity_val / 1023.0) * (MAX_SPEED - MIN_SPEED)) + MIN_SPEED;
 
-    checkLimits();
+    checkRearLimit();
+    checkFrontLimit();
+    
     //    Serial.print("target = ");
     //    Serial.print(stepper.targetPosition());
     //    Serial.print(" | current = ");
     //    Serial.print(stepper.currentPosition());
     //    Serial.print(" | distance to go = ");
     //    Serial.println(stepper.distanceToGo());
+    
     // Give the stepper a chance to step if it needs to
     if (pos != distance_val) {
       stepper.moveTo(distance_val);
