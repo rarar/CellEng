@@ -59,7 +59,7 @@ void updateDirection() {
       flipDirState = reading;
       if (flipDirState == LOW) {
         inReverse = !inReverse;
-        // Update the sign based on the toggle
+        Serial.println("flipping!");
         if (inReverse) {
           sign = -1;
         } else if (!inReverse) {
@@ -81,7 +81,10 @@ void updateHomeState() {
     if (reading != homeState) {
       homeState = reading;
       if (homeState == LOW) {
+        Serial.println("Setting new home direction");
         stepper.setCurrentPosition(0);
+        delay(1000);
+        stepper.moveTo(pos);
       }
     }
   }
@@ -97,20 +100,22 @@ void loop()
   static int distance_val = 0;
   static int analog_read_counter = 1000;
 
-  updateDirection();
-
   // There is some noise here - track absolute values to make sure that we haven't overshot
   if ((stepper.distanceToGo() == 0) || (abs(stepper.targetPosition()) < abs(stepper.currentPosition()))) {
     sign = -sign;
     stepper.setCurrentPosition(0);
-    stepper.moveTo(sign * distance_val);
+    stepper.moveTo(pos);
   }
 
-  //updateHomeState();
+  // check button states
+  updateDirection();
+  updateHomeState();
+
 
   // Check if we're powered on
   if (digitalRead(PAUSE_RUN_SWITCH)) return;
 
+  // poll pots only so often to optimize
   if (analog_read_counter > 0 ) {
     analog_read_counter--;
   } else {
