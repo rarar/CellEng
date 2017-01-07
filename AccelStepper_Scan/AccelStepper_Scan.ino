@@ -5,13 +5,16 @@
 #define PAUSE_RUN_SWITCH 10
 #define VELOCITY_POT A0
 #define DISTANCE_POT A1
+#define LIMIT_REAR A2
+#define LIMIT_FRONT A3
+#define NUM_LIMIT_READINGS 10
 
 #define MOTOR_DIR 2
 #define MOTOR_STEP 3
 
 #define MAX_DISTANCE 15000
 // Define our maximum and minimum speed in steps per second (scale pot to these)
-#define  MAX_SPEED 500
+#define  MAX_SPEED 800
 #define  MIN_SPEED 0.1
 
 // Define a stepper and the pins it will use
@@ -32,6 +35,14 @@ char sign = 1;
 int homeState;
 int lastHomeState = LOW;
 
+// Limit Sensors
+int limitRearReadings[NUM_LIMIT_READINGS];      // the readings from the analog input
+int limitRearReadIndex = 0;              // the index of the current reading
+int limitRearTotal = 0;                  // the running total
+int limitRearAverage = 0; // the average
+boolean overshoot = false;
+
+
 void setup()
 {
 
@@ -43,6 +54,11 @@ void setup()
   pinMode(PAUSE_RUN_SWITCH, INPUT_PULLUP);
   pinMode(VELOCITY_POT, INPUT);
   pinMode(DISTANCE_POT, INPUT);
+
+  // init limit smoothings
+  for (int thisReading = 0; thisReading < NUM_LIMIT_READINGS; thisReading++) {
+    limitRearReadings[thisReading] = 0;
+  }
 
   Serial.begin(115200);
 }
@@ -91,6 +107,40 @@ void updateHomeState() {
   lastHomeState = reading;
 }
 
+void checkLimits() {
+  static int analog_read_counter = 0;
+  // subtract the last reading:
+  limitRearTotal = limitRearTotal - limitRearReadings[limitRearReadIndex];
+  // read from the sensor:
+  limitRearReadings[limitRearReadIndex] = analogRead(LIMIT_REAR);
+  // add the reading to the total:
+  limitRearTotal = limitRearTotal + limitRearReadings[limitRearReadIndex];
+  // advance to the next position in the array:
+  limitRearReadIndex = limitRearReadIndex + 1;
+
+  // if we're at the end of the array...
+  if (limitRearReadIndex >= NUM_LIMIT_READINGS) {
+    // ...wrap around to the beginning:
+    limitRearReadIndex = 0;
+  }
+
+  // calculate the average:
+  limitRearAverage = limitRearTotal / NUM_LIMIT_READINGS;
+  Serial.print("Limit Reading = ");
+  Serial.print(limitRearAverage);
+  Serial.print(" | analog poll = ");
+  Serial.println(analog_read_counter);
+
+  // Analog Read Counter provides debounce
+  if (limitRearAverage < 920 && analog_read_counter <= 0) {
+    Serial.println("Time to turn around!");
+    sign = -sign;
+    analog_read_counter = 20;
+  }
+
+  analog_read_counter--;
+}
+
 void loop()
 {
 
@@ -124,20 +174,21 @@ void loop()
     velocity_val = analogRead(VELOCITY_POT);
     distance_val = analogRead(DISTANCE_POT);
     distance_val = sign * map(distance_val, 0, 1023, 0, MAX_DISTANCE);
-    //    stepper.moveTo(sign * distance_val);
-    Serial.print("target = ");
-    Serial.print(stepper.targetPosition());
-    Serial.print(" | current = ");
-    Serial.print(stepper.currentPosition());
-    Serial.print(" | distance to go = ");
-    Serial.println(stepper.distanceToGo());
+    current_speed = sign * ((velocity_val / 1023.0) * (MAX_SPEED - MIN_SPEED)) + MIN_SPEED;
+
+    checkLimits();
+    //    Serial.print("target = ");
+    //    Serial.print(stepper.targetPosition());
+    //    Serial.print(" | current = ");
+    //    Serial.print(stepper.currentPosition());
+    //    Serial.print(" | distance to go = ");
+    //    Serial.println(stepper.distanceToGo());
     // Give the stepper a chance to step if it needs to
     if (pos != distance_val) {
       stepper.moveTo(distance_val);
       pos = distance_val;
     }
-    //  And scale the pot's value from min to max speeds
-    current_speed = sign * ((velocity_val / 1023.0) * (MAX_SPEED - MIN_SPEED)) + MIN_SPEED;
+
     // Update the stepper to run at this new speed
     stepper.setSpeed(current_speed);
   }
