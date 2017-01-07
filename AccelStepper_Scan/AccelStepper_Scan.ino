@@ -16,7 +16,6 @@
 
 // Define a stepper and the pins it will use
 AccelStepper stepper(1, 3, 2);
-int sign = 1;
 int pos = MAX_DISTANCE;
 
 unsigned long lastFlipDebounceTime = 0;
@@ -26,12 +25,12 @@ unsigned long debounceDelay = 1;
 // Direction Variables
 int flipDirState;
 int lastFlipDirState = LOW;
+boolean inReverse = false;
+char sign = 1;
 
 // Home Button Variables
 int homeState;
 int lastHomeState = LOW;
-
-boolean isManual = true;
 
 void setup()
 {
@@ -59,9 +58,13 @@ void updateDirection() {
     if (reading != flipDirState) {
       flipDirState = reading;
       if (flipDirState == LOW) {
-        sign = -1 * sign;
-        //        Serial.print("new pos = "); Serial.println(sign*pos);
-        stepper.moveTo(sign * pos);
+        inReverse = !inReverse;
+        // Update the sign based on the toggle
+        if (inReverse) {
+          sign = -1;
+        } else if (!inReverse) {
+          sign = 1;
+        }
       }
     }
   }
@@ -78,8 +81,8 @@ void updateHomeState() {
     if (reading != homeState) {
       homeState = reading;
       if (homeState == LOW) {
-        stepper.setCurrentPosition(0);
-        stepper.moveTo(sign * pos);
+        //        stepper.setCurrentPosition(0);
+        //        stepper.moveTo(sign * pos);
         delay(1000); // Force a pause as user feedback
       }
     }
@@ -89,49 +92,62 @@ void updateHomeState() {
 
 void loop()
 {
+
+
+  static float current_speed = 0.0;
+  static int velocity_val = 0;
+  static int distance_val = 0;
+  static int analog_read_counter = 1000;
+
+  updateDirection();
+  //updateHomeState();
+
   // Check if we're powered on
   if (digitalRead(PAUSE_RUN_SWITCH)) return;
 
-  static float current_speed = 0.0;
-  static int analog_read_counter = 1000;
-  static int velocity_val = 0;
-  static int distance_val = 0;
-
-  updateDirection();
-  updateHomeState();
-
-
-  if (analog_read_counter > 0) {
+  if (analog_read_counter > 0 ) {
     analog_read_counter--;
   } else {
     analog_read_counter = 3000;
-    // now read the pot (from 0 to 1023)
+    // Now read the pot (from 0 to 1023)
     velocity_val = analogRead(VELOCITY_POT);
-    distance_val = map(analogRead(DISTANCE_POT), 0, 1023, 0, MAX_DISTANCE);
-    if (distance_val != pos) {
-      pos = distance_val;
-      stepper.stop();
-      stepper.moveTo(sign * pos);
-    }
-    current_speed = ((velocity_val / 1023.0) * (MAX_SPEED - MIN_SPEED)) + MIN_SPEED;
+    distance_val = analogRead(DISTANCE_POT);
+    distance_val = map(distance_val, 0, 1023, 0, MAX_DISTANCE);
+    Serial.println(distance_val);
+    // Give the stepper a chance to step if it needs to
+    stepper.runSpeed();
+    //  And scale the pot's value from min to max speeds
+    current_speed = sign * ((velocity_val / 1023.0) * (MAX_SPEED - MIN_SPEED)) + MIN_SPEED;
+    // Update the stepper to run at this new speed
     stepper.setSpeed(current_speed);
   }
-  //    Serial.println("auto mode");
-  if (stepper.distanceToGo() == 0) {
-    //      Serial.print("new pos = ");
-    //      Serial.println(pos);
-    sign = -1 * sign;
-    stepper.moveTo(sign * pos);
-    stepper.setSpeed(current_speed);
-    //      Serial.print("current speed = ");
-    //      Serial.println(current_speed);
-  }
-  Serial.print("stepper position = ");
-  Serial.print(stepper.currentPosition());
-  Serial.print(" ");
-  Serial.println(stepper.targetPosition());
-  stepper.runSpeedToPosition();
-
+  stepper.runSpeed();
+  //
+  //  // now read the pot (from 0 to 1023)
+  //  velocity_val = analogRead(VELOCITY_POT);
+  //  distance_val = map(analogRead(DISTANCE_POT), 0, 1023, 0, MAX_DISTANCE);
+  ////  if (distance_val != pos) {
+  ////    pos = distance_val;
+  ////    stepper.stop();
+  ////    stepper.moveTo(sign * pos);
+  ////    current_speed = ((velocity_val / 1023.0) * (MAX_SPEED - MIN_SPEED)) + MIN_SPEED;
+  ////    stepper.setSpeed(current_speed);
+  ////  }
+  ////  Serial.println("auto mode");
+  //  if (stepper.distanceToGo() == 0) {
+  //    //      Serial.print("new pos = ");
+  //    //      Serial.println(pos);
+  //    sign = -1 * sign;
+  //    stepper.moveTo(sign * pos);
+  //    stepper.setSpeed(current_speed);
+  //    //      Serial.print("current speed = ");
+  //    //      Serial.println(current_speed);
+  //  }
+  //  Serial.print("stepper position = ");
+  //  Serial.print(stepper.currentPosition());
+  //  Serial.print(" ");
+  //  Serial.println(stepper.targetPosition());
+  //  stepper.runSpeedToPosition();
 
 }
 
